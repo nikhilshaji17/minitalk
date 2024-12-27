@@ -1,0 +1,30 @@
+Open a terminal and start the server
+Print the PID
+
+Open another terminal and compile the client
+execute ./client and pass the PID along with the string
+
+The server has to receive the string and display it asap
+
+To comprehend the implementation of Minitalk, it is necessary to 
+have a fundamental understanding of signals and sigaction, 
+as well as the process of converting characters to binary and vice versa.
+
+Signals are software interruptions that are utilized to interrupt a running process 
+to execute another action. Examples include bus error and segfault.
+
+If a signal is ignored, it means that the process has no response to the interruption, 
+although it should be noted that certain signals cannot be ignored, such as SIGKILL and SIGSTOP.
+
+----------------------------------------------
+
+Signals are like integer notifications that tell you what to do
+
+
+
+
+https://medium.com/@oduwoledare/42-minitalk-explained-5b236adc2c24
+
+To do:
+1. Change printf to ft_printf
+2. Change atoi to ft_atoi
