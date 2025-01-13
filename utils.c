@@ -12,10 +12,14 @@
 
 #include "minitalk.h"
 
-void	Signal(int signo, void *handler, bool use_siginfo)
+void	sigac_wrapper(int signo, void *handler, bool use_siginfo)
 {
-	struct	sigaction sa = {0};
+	struct sigaction	sa;
 
+	sa.sa_flags = 0;
+	sa.sa_handler = NULL;
+	sa.sa_sigaction = NULL;
+	sigemptyset(&sa.sa_mask);
 	if (use_siginfo)
 	{
 		sa.sa_flags = SA_SIGINFO;
@@ -23,21 +27,56 @@ void	Signal(int signo, void *handler, bool use_siginfo)
 	}
 	else
 		sa.sa_handler = handler;
-	sigemptyset(&sa.sa_mask);
 	sigaddset(&sa.sa_mask, SIGUSR1);
 	sigaddset(&sa.sa_mask, SIGUSR2);
 	if (sigaction(signo, &sa, NULL) < 0)
 	{
-		perror("Sigaction failed\n");
+		ft_printf("Sigaction failed\n");
 		exit(EXIT_FAILURE);
 	}
 }
 
-void	Kill(pid_t pid, int signo)
+void	kill_wrapper(pid_t pid, int signo)
 {
 	if (kill(pid, signo) < 0)
 	{
-		perror("Kill failed\n");
+		ft_printf("Kill failed\n");
 		exit(EXIT_FAILURE);
 	}
+}
+
+int	ft_isdigit(int c)
+{
+	if (c >= '0' && c <= '9')
+		return (1);
+	return (0);
+}
+
+int	ft_atoi(const char *str)
+{
+	int	i;
+	int	sign;
+	int	answer;
+
+	i = 0;
+	sign = 1;
+	answer = 0;
+	while (str[i] != '\0')
+	{
+		while (str[i] == ' ' || str[i] == '\t' || (str[i] >= 9 && str[i] <= 13))
+			i = i + 1;
+		if (str[i] == '+' || str[i] == '-')
+		{
+			if (str[i] == '-')
+				sign = -1;
+			i = i + 1;
+		}
+		while (str[i] >= 48 && str[i] <= 57)
+		{
+			answer = (answer * 10) + (str[i] - 48);
+			i = i + 1;
+		}
+		return (sign * answer);
+	}
+	return (sign * answer);
 }

@@ -1,3 +1,5 @@
+Program blueprint:
+------------------
 Open a terminal and start the server
 Print the PID
 
@@ -6,25 +8,219 @@ execute ./client and pass the PID along with the string
 
 The server has to receive the string and display it asap
 
-To comprehend the implementation of Minitalk, it is necessary to 
-have a fundamental understanding of signals and sigaction, 
-as well as the process of converting characters to binary and vice versa.
+Notes:
+-------
 
-Signals are software interruptions that are utilized to interrupt a running process 
-to execute another action. Examples include bus error and segfault.
+Signals are the simplest way to interact with a process in a Unix style system
+(Like Linux, MacOS etc.)
 
-If a signal is ignored, it means that the process has no response to the interruption, 
-although it should be noted that certain signals cannot be ignored, such as SIGKILL and SIGSTOP.
+Ctrl-C is a signal, it is a SIGINT signal, telling the process to end.
+SIGINT = Signal Interrupt
 
-----------------------------------------------
+We can also customize what you want a signal to do by writing a custom handler function
 
-Signals are like integer notifications that tell you what to do
+Example:
+
+void handler(int num)
+{
+	write(STDOUT_FILENO, "No longer terminating\n", 22);
+}
+
+int main()
+{
+	signal(SIGINT, handler);
+	// signal(SIGTERM, handler);
+	while (1)
+	{
+		printf("Printing the pid: %d\n", getpid());
+		sleep(1);
+	}
+}
+
+If we did not have the handler function, then SIGINT would just terminate the program
+So we would use SIGTERM instead, which can also in fact, be overwritten (line 33).
+
+NOTE: Certain processes can interrupt your code at ANY point, so we CANNOT
+	use any normal functions inside our signal handler function, because 
+	they may not be async safe. This is why we use the write function (line 27) 
+	inside our handler function instead of printf, because printf is NOT async safe.
+
+Difference between SIGINT, SIGQUIT and SIGTERM:
+SIGINT: Allows the user to terminate a process in the foreground by
+	pressing Ctrl + C
+
+SIGQUIT: Allows the user to terminate a process by pressing Ctrl + \
+	The difference is that this generates a core dump as well, which
+	can be used for debugging.
+
+SIGTERM: This is a signal sent from one process to another using the kill keyword.
+	This is a polite request to terminate, meaning resource clean-up also occurs.
+
+In short:
+	SIGINT: User-initiated interruption (interactive, foreground process).
+	SIGQUIT: User-initiated interruption with debugging info (interrupt and dump core).
+	SIGTERM: Programmatic, graceful termination of a process by other processes or the OS.
+
+There is also SIGKILL, which is like SIGTERM without resource cleanup. We CANNOT use a 
+handler function for SIGKILL. It bypasses it all.
+
+In other words, SIGINT, SIGQUIT and SIGTERM are requests. 
+SIGKILL is an order.
+
+Use cases for signals:
+1. In the above example, we are using signals to kill processes. 
+2. We can also use signals to stop processes, and continue them too.
+3. To communicate between processes, letting each other know that something has happened.
+
+We can also use SIGUSR1 and SIGUSR2 to define whatever we want the program to do.
+
+The kill() function does not necessarily kill the process, it sends a signal 
+	and the process that receives that signal knows what to do with it.
+
+Syntax => kill(process_id, signal_num)
+	example: kill(12345, SIGKILL) // This will forcefully terminate the process 12345
 
 
+Example of fork() function:
+
+int main()
+{
+	int pid = fork();
+	printf("%d\n", pid);
+
+	if (pid == 0)
+	{
+		while (1)
+		{
+			printf("This is child process\n");
+			usleep(50000);
+		}
+	}
+	else
+	{	
+		sleep(3);
+		printf("Killing pid: %d\n", pid);
+		kill(pid, SIGKILL);
+	}
+	printf("%d\n", getpid());
+}
+In the example above, we use the fork function just to create a child process
+The pid of the parent may initially be 1000.
+When we use the fork function, a child process is created with the same resources of 
+	the parent process.
+The parent process will now have its original pid + 1, the child will have the pid 0
+Everything in the if (pid == 0) loop will be executed by the child
+	while everything in the else loop will be executed by the parent
+The final printf shows the original pid of the parent, which will again be 1000.
 
 
-https://medium.com/@oduwoledare/42-minitalk-explained-5b236adc2c24
+signal and sigaction:
+The signal() function does not (necessarily) block other signals from arriving
+while the current handler is executing; sigaction() can block other signals until 
+the current handler returns.
 
-To do:
-1. Change printf to ft_printf
-2. Change atoi to ft_atoi
+The signal() function (usually) resets the signal action back to SIG_DFL (default) for almost
+all signals. This means that the signal() handler must reinstall itself as its first action. 
+It also opens up a window of vulnerability between the time when the signal is detected and the 
+handler is reinstalled during which if a second instance of the signal arrives, 
+the default behaviour (usually terminate, sometimes with prejudice - aka core dump) occurs.
+
+The exact behaviour of signal() varies between systems — and the standards permit those variations.
+
+
+Actual Program:
+---------------
+Server.c
+	We use the pause function in server.c because it pauses the program
+	till it receives a signal from the kill() function or an interval timer.
+
+	SIGUSR1 represents the bit 1 here
+	SIGUSR2 represents the bit 0 here
+
+
+Client.c
+	We use the volatile keyword to declare our global variable. What it does is it ensures that 
+	the value of g_pid is always the latest value, and not some earlier cached value.
+	If we did not use the volatile keyword, then our program could refer to an earlier incorrect cached value.
+	We use this because of the asynchronous nature of our program.
+	The volatile keyword is used here to ensure that g_pid is always read from memory rather than being cached by the compiler.
+	This is critical in scenarios involving signal handlers, where the value of g_pid can change unexpectedly due to 
+	asynchronous signals, and you want to ensure the program reacts to these changes immediately.
+
+	sig_atomic_t is a type intended for variables that may be modified by signal handlers.
+
+	In the example below, the importance of the volatile keyword is presented:
+	
+	static int foo; // global variable
+	
+	void example (void)
+	{
+		foo = 0;
+		while (foo != 255)
+		{
+			;
+		}
+	}
+
+	An optimizing compiler may look at the above while loop, and realize that the value of foo will never change,
+	since the while loop is infinite. So it would rewrite the code as this:
+
+	static int foo; // global variable
+	
+	void example (void)
+	{
+		foo = 0;
+		while (true)
+		{
+			;
+		}
+	}
+
+	However, the value of foo could change if we are doing async programming, or using signal handlers etc.
+	So in order to read the latest value of foo at all times, we use the volatile variable.
+	
+Program flow:
+1. First we start server.c
+2. We print the server ID
+3. The handle_signal function will be executed if we come across
+	SIGUSR1 or SIGUSR2
+4. The while loop pauses the program execution, and waits for signals.
+
+5. Now we execute the client program
+6. Over here, the ack_handler will set g_pid to READY. This means
+	that the next letter is ready to be sent.
+7. The end_handler function will display a string to indicate that
+	the message has been received, and end execution.
+8. We will try to send each letter via the main function.
+9. The while loop in the main function will call 
+	the send_signal_to_process function
+10. It will keep sending letters as long as g_pid is not BUSY. If it is, then it will wait
+
+11. The server will receive SIGUSR1 or SIGUSR2 from the client, depending on whether it is 1 or 0
+12. The server will then reconstruct the character, and send SIGUSR1 to the client if it is ready
+	for more letters, or SIGUSR2 if it received the EOF
+13. If the client receives SIGUSR1, this indicates that the previous letter was accepted, and it 
+	sets the g_pid to READY.
+14. So now, the next letter is sent since g_pid is now no longer BUSY, but now it is reset back to BUSY
+15. Once the server sends SIGUSR2, that indicates to the client to end the program.
+
+kill() function:
+If pid is greater than zero:
+	Sig is sent to the process whose ID is equal to pid.
+
+If pid is zero:
+	Sig is sent to all processes whose group ID is equal to the process group ID of the sender, and for which the process has permis-
+	sion; this is a variant of killpg(2).
+
+If pid is -1:
+	If the user has super-user privileges, the signal is sent to all processes excluding system processes and the process sending the
+	signal.  If the user is not the super user, the signal is sent to all processes with the same uid as the user, excluding the
+	process sending the signal.  No error is returned if any process could be signaled.
+
+Resources Used:
+1. Short introduction to signals in C - https://www.youtube.com/watch?v=5We_HtLlAbs
+2. Minitalk article - https://medium.com/@oduwoledare/42-minitalk-explained-5b236adc2c24 
+3. Sending and Handling Signals in C - https://www.youtube.com/watch?v=83M5-NPDeWs
+4. Stopping and continuing the execution of a process - https://www.youtube.com/watch?v=3MZjaZxZYrE&list=PLfqABt5AS4FkW5mOn2Tn9ZZLLDwA3kZUY&index=17
+5. Sigaction explanation - https://www.emblogic.com/blog/02/why-is-sigaction-a-better-option-than-signal/
+
